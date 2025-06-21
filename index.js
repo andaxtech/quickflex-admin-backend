@@ -129,6 +129,40 @@ app.post('/drivers/:driverId/car', async (req, res) => {
   }
 });
 
+// Get background check details for a specific driver
+app.get('/drivers/:driverId/background', async (req, res) => {
+  const { driverId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM background_checks WHERE driver_id = $1 ORDER BY check_date DESC LIMIT 1',
+      [driverId]
+    );
+    res.json(result.rows[0] || {});
+  } catch (err) {
+    console.error('Error fetching background check:', err.message);
+    res.status(500).json({ error: 'Failed to fetch background check' });
+  }
+});
+
+// Update background check info
+app.post('/drivers/:driverId/background', async (req, res) => {
+  const { driverId } = req.params;
+  const { check_status, check_date, verified_by, notes } = req.body;
+
+  try {
+    await pool.query(
+      `INSERT INTO background_checks (driver_id, check_status, check_date, verified_by, notes)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [driverId, check_status, check_date, verified_by, notes]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating background check:', err.message);
+    res.status(500).json({ error: 'Failed to update background check' });
+  }
+});
+
+
 // Update driver status
 app.post('/drivers/update-status', async (req, res) => {
   const { driver_id, new_status } = req.body;
