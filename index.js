@@ -93,6 +93,42 @@ app.get('/drivers/:driverId', async (req, res) => {
   }
 });
 
+// Get car details for a specific driver
+app.get('/drivers/:driverId/car', async (req, res) => {
+  const { driverId } = req.params;
+  try {
+    const result = await pool.query(
+      'SELECT * FROM car_details WHERE driver_id = $1 ORDER BY inspection_date DESC LIMIT 1',
+      [driverId]
+    );
+    res.json(result.rows[0] || {});
+  } catch (err) {
+    console.error('Error fetching car details:', err.message);
+    res.status(500).json({ error: 'Failed to fetch car details' });
+  }
+});
+
+// Update car details
+app.post('/drivers/:driverId/car', async (req, res) => {
+  const { driverId } = req.params;
+  const {
+    make, model, year, vin_number, license_plate,
+    inspection_status, inspection_date
+  } = req.body;
+
+  try {
+    await pool.query(
+      `INSERT INTO car_details (driver_id, make, model, year, vin_number, license_plate, inspection_status, inspection_date)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [driverId, make, model, year, vin_number, license_plate, inspection_status, inspection_date]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating car details:', err.message);
+    res.status(500).json({ error: 'Failed to update car details' });
+  }
+});
+
 // Update driver status
 app.post('/drivers/update-status', async (req, res) => {
   const { driver_id, new_status } = req.body;
