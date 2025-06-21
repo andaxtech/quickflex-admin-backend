@@ -162,6 +162,48 @@ app.post('/drivers/:driverId/background', async (req, res) => {
   }
 });
 
+// GET latest insurance details
+app.get('/drivers/:driverId/insurance', async (req, res) => {
+  const { driverId } = req.params;
+  const result = await pool.query(
+    'SELECT * FROM insurance_details WHERE driver_id = $1 ORDER BY start_date DESC LIMIT 1',
+    [driverId]
+  );
+  res.json(result.rows[0] || {});
+});
+
+// POST new insurance details
+app.post('/drivers/:driverId/insurance', async (req, res) => {
+  const { provider, policy_number, start_date, end_date } = req.body;
+  await pool.query(
+    `INSERT INTO insurance_details(driver_id, provider, policy_number, start_date, end_date)
+     VALUES($1,$2,$3,$4,$5)`,
+    [req.params.driverId, provider, policy_number, start_date, end_date]
+  );
+  res.json({ success: true });
+});
+
+// GET latest banking info
+app.get('/drivers/:driverId/banking', async (req, res) => {
+  const { driverId } = req.params;
+  const result = await pool.query(
+    'SELECT * FROM driver_banking_info WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 1',
+    [driverId]
+  );
+  res.json(result.rows[0] || {});
+});
+
+// POST new banking info
+app.post('/drivers/:driverId/banking', async (req, res) => {
+  const { bank_name, account_number, routing_number } = req.body;
+  await pool.query(
+    `INSERT INTO driver_banking_info(driver_id, bank_name, account_number, routing_number, created_at)
+     VALUES($1,$2,$3,$4,NOW())`,
+    [req.params.driverId, bank_name, account_number, routing_number]
+  );
+  res.json({ success: true });
+});
+
 
 // Update driver status
 app.post('/drivers/update-status', async (req, res) => {
