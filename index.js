@@ -19,26 +19,36 @@ app.get('/', (req, res) => {
   res.send('QuickFlex Admin Backend is running.');
 });
 
-// Fetch all pending driver details
+// Fetch all pending driver details (one row per driver)
 app.get('/drivers/pending-details', async (req, res) => {
   try {
     const query = `
-      SELECT 
-        d.driver_id, d.first_name, d.last_name, d.email, d.phone_number, d.birth_date, d.license_number, d.license_expiration,
+      SELECT DISTINCT ON (d.driver_id)
+        d.driver_id, d.first_name, d.last_name, d.email, d.phone_number, d.birth_date,
+        d.license_number, d.license_expiration, d.registration_date, d.status,
         c.make, c.model, c.year, c.vin_number, c.license_plate, c.inspection_status, c.inspection_date,
         b.check_status, b.check_date, b.verified_by, b.notes AS background_notes,
         i.provider, i.policy_number, i.start_date AS insurance_start, i.end_date AS insurance_end,
         bank.bank_name, bank.account_number, bank.routing_number
       FROM drivers d
-      LEFT JOIN car_details c ON d.driver_id = c.driver_id
-      LEFT JOIN background_checks b ON d.driver_id = b.driver_id
-      LEFT JOIN insurance_details i ON d.driver_id = i.driver_id
-      LEFT JOIN driver_banking_info bank ON d.driver_id = bank.driver_id
+      LEFT JOIN LATERAL (
+        SELECT * FROM car_details WHERE driver_id = d.driver_id ORDER BY inspection_date DESC LIMIT 1
+      ) c ON true
+      LEFT JOIN LATERAL (
+        SELECT * FROM background_checks WHERE driver_id = d.driver_id ORDER BY check_date DESC LIMIT 1
+      ) b ON true
+      LEFT JOIN LATERAL (
+        SELECT * FROM insurance_details WHERE driver_id = d.driver_id ORDER BY start_date DESC LIMIT 1
+      ) i ON true
+      LEFT JOIN LATERAL (
+        SELECT * FROM driver_banking_info WHERE driver_id = d.driver_id ORDER BY created_at DESC LIMIT 1
+      ) bank ON true
       WHERE d.status = 'New Registered'
-      ORDER BY d.registration_date DESC;
+      ORDER BY d.driver_id, d.registration_date DESC;
     `;
-    const result = await pool.query(query);
-    res.json(result.rows);
+
+    const { rows } = await pool.query(query);
+    res.json(rows);
   } catch (err) {
     console.error('Error fetching pending driver details:', err.message);
     res.status(500).json({ error: 'Failed to fetch driver details' });
@@ -48,16 +58,11 @@ app.get('/drivers/pending-details', async (req, res) => {
 // Update driver status (approve/reject)
 app.post('/drivers/update-status', async (req, res) => {
   const { driver_id, new_status } = req.body;
-
   if (!driver_id || !new_status) {
     return res.status(400).json({ error: 'Missing driver_id or new_status' });
   }
-
   try {
-    await pool.query(
-      'UPDATE drivers SET status = $1 WHERE driver_id = $2',
-      [new_status, driver_id]
-    );
+    await pool.query('UPDATE drivers SET status = $1 WHERE driver_id = $2', [new_status, driver_id]);
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating driver status:', err.message);
@@ -65,6 +70,4 @@ app.post('/drivers/update-status', async (req, res) => {
   }
 });
 
-app.listen(port, () => {
-  console.log(`Admin backend running on port ${port}`);
-});
+app.listen(port, () => console.log(`Admin backend running on port ${port}`));
