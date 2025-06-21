@@ -19,6 +19,7 @@ app.get('/', (req, res) => {
   res.send('QuickFlex Admin Backend is running.');
 });
 
+// Get all drivers (basic info for dashboard)
 app.get('/drivers/all', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -35,15 +36,24 @@ app.get('/drivers/all', async (req, res) => {
   }
 });
 
+// Get pending-driver details
 app.get('/drivers/pending-details', async (req, res) => {
   try {
     const query = `
       SELECT DISTINCT ON (d.driver_id)
-        d.driver_id, d.first_name, d.last_name, d.email, d.phone_number, d.birth_date,
-        d.license_number, d.license_expiration, d.registration_date, d.status,
-        c.make, c.model, c.year, c.vin_number, c.license_plate, c.inspection_status, c.inspection_date,
-        b.check_status, b.check_date, b.verified_by, b.notes AS background_notes,
-        i.provider, i.policy_number, i.start_date AS insurance_start, i.end_date AS insurance_end,
+        d.driver_id, d.first_name, d.last_name, d.email, d.phone_number,
+        TO_CHAR(d.birth_date, 'MM-DD-YYYY') AS birth_date,
+        d.license_number,
+        TO_CHAR(d.license_expiration, 'MM-DD-YYYY') AS license_expiration,
+        TO_CHAR(d.registration_date, 'MM-DD-YYYY') AS registration_date,
+        d.status,
+        c.make, c.model, c.year, c.vin_number, c.license_plate, c.inspection_status,
+        TO_CHAR(c.inspection_date, 'MM-DD-YYYY') AS inspection_date,
+        b.check_status,
+        TO_CHAR(b.check_date, 'MM-DD-YYYY') AS check_date, b.verified_by, b.notes AS background_notes,
+        i.provider, i.policy_number,
+        TO_CHAR(i.start_date, 'MM-DD-YYYY') AS insurance_start,
+        TO_CHAR(i.end_date, 'MM-DD-YYYY') AS insurance_end,
         bank.bank_name, bank.account_number, bank.routing_number
       FROM drivers d
       LEFT JOIN LATERAL (
@@ -69,12 +79,17 @@ app.get('/drivers/pending-details', async (req, res) => {
   }
 });
 
+// Get single driver profile
 app.get('/drivers/:driverId', async (req, res) => {
   const { driverId } = req.params;
   try {
     const result = await pool.query(`
-      SELECT driver_id, first_name, last_name, email, phone_number, birth_date,
-             license_number, license_expiration, registration_date, status
+      SELECT driver_id, first_name, last_name, email, phone_number,
+             TO_CHAR(birth_date, 'MM-DD-YYYY') AS birth_date,
+             license_number,
+             TO_CHAR(license_expiration, 'MM-DD-YYYY') AS license_expiration,
+             TO_CHAR(registration_date, 'MM-DD-YYYY') AS registration_date,
+             status
       FROM drivers
       WHERE driver_id = $1
     `, [driverId]);
@@ -90,13 +105,18 @@ app.get('/drivers/:driverId', async (req, res) => {
   }
 });
 
+// Get car details for a specific driver
 app.get('/drivers/:driverId/car', async (req, res) => {
   const { driverId } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT * FROM car_details WHERE driver_id = $1 ORDER BY inspection_date DESC LIMIT 1',
-      [driverId]
-    );
+    const result = await pool.query(`
+      SELECT make, model, year, vin_number, license_plate, inspection_status,
+             TO_CHAR(inspection_date, 'MM-DD-YYYY') AS inspection_date
+      FROM car_details
+      WHERE driver_id = $1
+      ORDER BY inspection_date DESC
+      LIMIT 1
+    `, [driverId]);
     res.json(result.rows[0] || {});
   } catch (err) {
     console.error('Error fetching car details:', err.message);
@@ -104,6 +124,7 @@ app.get('/drivers/:driverId/car', async (req, res) => {
   }
 });
 
+// Update car details
 app.post('/drivers/:driverId/car', async (req, res) => {
   const { driverId } = req.params;
   const {
@@ -112,18 +133,18 @@ app.post('/drivers/:driverId/car', async (req, res) => {
   } = req.body;
 
   try {
-    await pool.query(
-      `INSERT INTO car_details (driver_id, make, model, year, vin_number, license_plate, inspection_status, inspection_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       ON CONFLICT (vin_number) DO UPDATE SET
-         make = EXCLUDED.make,
-         model = EXCLUDED.model,
-         year = EXCLUDED.year,
-         license_plate = EXCLUDED.license_plate,
-         inspection_status = EXCLUDED.inspection_status,
-         inspection_date = EXCLUDED.inspection_date`,
-      [driverId, make, model, year, vin_number, license_plate, inspection_status, inspection_date]
-    );
+    await pool.query(`
+      INSERT INTO car_details (driver_id, make, model, year, vin_number, license_plate, inspection_status, inspection_date)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (vin_number) DO UPDATE
+        SET make = EXCLUDED.make,
+            model = EXCLUDED.model,
+            year = EXCLUDED.year,
+            license_plate = EXCLUDED.license_plate,
+            inspection_status = EXCLUDED.inspection_status,
+            inspection_date = EXCLUDED.inspection_date
+    `, [driverId, make, model, year, vin_number, license_plate, inspection_status, inspection_date]);
+
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating car details:', err.message);
@@ -131,13 +152,19 @@ app.post('/drivers/:driverId/car', async (req, res) => {
   }
 });
 
+// Get background check details
 app.get('/drivers/:driverId/background', async (req, res) => {
   const { driverId } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT * FROM background_checks WHERE driver_id = $1 ORDER BY check_date DESC LIMIT 1',
-      [driverId]
-    );
+    const result = await pool.query(`
+      SELECT check_status,
+             TO_CHAR(check_date, 'MM-DD-YYYY') AS check_date,
+             verified_by, notes
+      FROM background_checks
+      WHERE driver_id = $1
+      ORDER BY check_date DESC
+      LIMIT 1
+    `, [driverId]);
     res.json(result.rows[0] || {});
   } catch (err) {
     console.error('Error fetching background check:', err.message);
@@ -145,16 +172,17 @@ app.get('/drivers/:driverId/background', async (req, res) => {
   }
 });
 
+// Update background check info
 app.post('/drivers/:driverId/background', async (req, res) => {
   const { driverId } = req.params;
   const { check_status, check_date, verified_by, notes } = req.body;
 
   try {
-    await pool.query(
-      `INSERT INTO background_checks (driver_id, check_status, check_date, verified_by, notes)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [driverId, check_status, check_date, verified_by, notes]
-    );
+    await pool.query(`
+      INSERT INTO background_checks (driver_id, check_status, check_date, verified_by, notes)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [driverId, check_status, check_date, verified_by, notes]);
+
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating background check:', err.message);
@@ -162,13 +190,19 @@ app.post('/drivers/:driverId/background', async (req, res) => {
   }
 });
 
+// Get insurance details
 app.get('/drivers/:driverId/insurance', async (req, res) => {
   const { driverId } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT * FROM insurance_details WHERE driver_id = $1 ORDER BY start_date DESC LIMIT 1',
-      [driverId]
-    );
+    const result = await pool.query(`
+      SELECT provider, policy_number,
+             TO_CHAR(start_date, 'MM-DD-YYYY') AS start_date,
+             TO_CHAR(end_date, 'MM-DD-YYYY') AS end_date
+      FROM insurance_details
+      WHERE driver_id = $1
+      ORDER BY start_date DESC
+      LIMIT 1
+    `, [driverId]);
     res.json(result.rows[0] || {});
   } catch (err) {
     console.error('Error fetching insurance details:', err.message);
@@ -176,15 +210,21 @@ app.get('/drivers/:driverId/insurance', async (req, res) => {
   }
 });
 
+// Update insurance details
 app.post('/drivers/:driverId/insurance', async (req, res) => {
+  const { driverId } = req.params;
   const { provider, policy_number, start_date, end_date } = req.body;
-  if (!policy_number) return res.status(400).json({ error: 'Missing policy_number' });
+
+  if (!policy_number) {
+    return res.status(400).json({ error: 'Missing policy_number' });
+  }
+
   try {
-    await pool.query(
-      `INSERT INTO insurance_details(driver_id, provider, policy_number, start_date, end_date)
-       VALUES($1,$2,$3,$4,$5)`,
-      [req.params.driverId, provider, policy_number, start_date, end_date]
-    );
+    await pool.query(`
+      INSERT INTO insurance_details(driver_id, provider, policy_number, start_date, end_date)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [driverId, provider, policy_number, start_date, end_date]);
+
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating insurance details:', err.message);
@@ -192,13 +232,18 @@ app.post('/drivers/:driverId/insurance', async (req, res) => {
   }
 });
 
+// Get banking info
 app.get('/drivers/:driverId/banking', async (req, res) => {
   const { driverId } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT * FROM driver_banking_info WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [driverId]
-    );
+    const result = await pool.query(`
+      SELECT bank_name, account_number, routing_number,
+             TO_CHAR(created_at, 'MM-DD-YYYY") AS created_at
+      FROM driver_banking_info
+      WHERE driver_id = $1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `, [driverId]);
     res.json(result.rows[0] || {});
   } catch (err) {
     console.error('Error fetching banking info:', err.message);
@@ -206,19 +251,22 @@ app.get('/drivers/:driverId/banking', async (req, res) => {
   }
 });
 
+// Update banking info
 app.post('/drivers/:driverId/banking', async (req, res) => {
+  const { driverId } = req.params;
   const { bank_name, account_number, routing_number } = req.body;
+
   try {
-    await pool.query(
-      `INSERT INTO driver_banking_info(driver_id, bank_name, account_number, routing_number, created_at)
-       VALUES($1,$2,$3,$4,NOW())
-       ON CONFLICT (driver_id) DO UPDATE SET
-         bank_name = EXCLUDED.bank_name,
-         account_number = EXCLUDED.account_number,
-         routing_number = EXCLUDED.routing_number,
-         created_at = NOW()`,
-      [req.params.driverId, bank_name, account_number, routing_number]
-    );
+    await pool.query(`
+      INSERT INTO driver_banking_info(driver_id, bank_name, account_number, routing_number, created_at)
+      VALUES ($1, $2, $3, $4, NOW())
+      ON CONFLICT (driver_id) DO UPDATE SET
+        bank_name = EXCLUDED.bank_name,
+        account_number = EXCLUDED.account_number,
+        routing_number = EXCLUDED.routing_number,
+        created_at = NOW()
+    `, [driverId, bank_name, account_number, routing_number]);
+
     res.json({ success: true });
   } catch (err) {
     console.error('Error updating banking info:', err.message);
@@ -226,6 +274,7 @@ app.post('/drivers/:driverId/banking', async (req, res) => {
   }
 });
 
+// Update driver status
 app.post('/drivers/update-status', async (req, res) => {
   const { driver_id, new_status } = req.body;
   if (!driver_id || !new_status) {
