@@ -238,7 +238,7 @@ app.get('/drivers/:driverId/banking', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT bank_name, account_number, routing_number,
-             TO_CHAR(created_at, 'MM-DD-YYYY") AS created_at
+             TO_CHAR(created_at, 'MM-DD-YYYY') AS created_at
       FROM driver_banking_info
       WHERE driver_id = $1
       ORDER BY created_at DESC
