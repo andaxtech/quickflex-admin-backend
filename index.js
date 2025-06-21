@@ -19,7 +19,7 @@ app.get('/', (req, res) => {
   res.send('QuickFlex Admin Backend is running.');
 });
 
-// ✅ New: fetch all drivers (basic info for list view)
+// Fetch all drivers (basic info for list view)
 app.get('/drivers/all', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -36,7 +36,25 @@ app.get('/drivers/all', async (req, res) => {
   }
 });
 
-// ✅ Already exists: fetch detailed pending driver data
+// Fetch one driver by ID
+app.get('/drivers/:driverId', async (req, res) => {
+  const driverId = req.params.driverId;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM drivers WHERE driver_id = $1`,
+      [driverId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching driver:', err.message);
+    res.status(500).json({ error: 'Failed to fetch driver' });
+  }
+});
+
+// Fetch detailed pending driver data
 app.get('/drivers/pending-details', async (req, res) => {
   try {
     const query = `
