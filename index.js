@@ -19,7 +19,7 @@ app.get('/', (req, res) => {
   res.send('QuickFlex Admin Backend is running.');
 });
 
-// Fetch all drivers (basic info for list view)
+// Get all drivers (basic info for dashboard)
 app.get('/drivers/all', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -36,25 +36,7 @@ app.get('/drivers/all', async (req, res) => {
   }
 });
 
-// Fetch one driver by ID
-app.get('/drivers/:driverId', async (req, res) => {
-  const driverId = req.params.driverId;
-  try {
-    const result = await pool.query(
-      `SELECT * FROM drivers WHERE driver_id = $1`,
-      [driverId]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Driver not found' });
-    }
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('Error fetching driver:', err.message);
-    res.status(500).json({ error: 'Failed to fetch driver' });
-  }
-});
-
-// Fetch detailed pending driver data
+// Get detailed pending driver info
 app.get('/drivers/pending-details', async (req, res) => {
   try {
     const query = `
@@ -81,12 +63,33 @@ app.get('/drivers/pending-details', async (req, res) => {
       WHERE d.status = 'New Registered'
       ORDER BY d.driver_id, d.registration_date DESC;
     `;
-
     const { rows } = await pool.query(query);
     res.json(rows);
   } catch (err) {
     console.error('Error fetching pending driver details:', err.message);
     res.status(500).json({ error: 'Failed to fetch driver details' });
+  }
+});
+
+// Get single driver profile
+app.get('/drivers/:driverId', async (req, res) => {
+  const { driverId } = req.params;
+  try {
+    const result = await pool.query(`
+      SELECT driver_id, first_name, last_name, email, phone_number, birth_date,
+             license_number, license_expiration, registration_date, status
+      FROM drivers
+      WHERE driver_id = $1
+    `, [driverId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Driver not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error fetching driver:', err.message);
+    res.status(500).json({ error: 'Failed to fetch driver' });
   }
 });
 
