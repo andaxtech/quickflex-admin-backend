@@ -19,7 +19,6 @@ app.get('/', (req, res) => {
   res.send('QuickFlex Admin Backend is running.');
 });
 
-// Get all drivers (basic info for dashboard)
 app.get('/drivers/all', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -36,7 +35,6 @@ app.get('/drivers/all', async (req, res) => {
   }
 });
 
-// Get detailed pending driver info
 app.get('/drivers/pending-details', async (req, res) => {
   try {
     const query = `
@@ -71,7 +69,6 @@ app.get('/drivers/pending-details', async (req, res) => {
   }
 });
 
-// Get single driver profile
 app.get('/drivers/:driverId', async (req, res) => {
   const { driverId } = req.params;
   try {
@@ -93,7 +90,6 @@ app.get('/drivers/:driverId', async (req, res) => {
   }
 });
 
-// Get car details for a specific driver
 app.get('/drivers/:driverId/car', async (req, res) => {
   const { driverId } = req.params;
   try {
@@ -108,7 +104,6 @@ app.get('/drivers/:driverId/car', async (req, res) => {
   }
 });
 
-// Update car details
 app.post('/drivers/:driverId/car', async (req, res) => {
   const { driverId } = req.params;
   const {
@@ -119,7 +114,14 @@ app.post('/drivers/:driverId/car', async (req, res) => {
   try {
     await pool.query(
       `INSERT INTO car_details (driver_id, make, model, year, vin_number, license_plate, inspection_status, inspection_date)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       ON CONFLICT (vin_number) DO UPDATE SET
+         make = EXCLUDED.make,
+         model = EXCLUDED.model,
+         year = EXCLUDED.year,
+         license_plate = EXCLUDED.license_plate,
+         inspection_status = EXCLUDED.inspection_status,
+         inspection_date = EXCLUDED.inspection_date`,
       [driverId, make, model, year, vin_number, license_plate, inspection_status, inspection_date]
     );
     res.json({ success: true });
@@ -129,7 +131,6 @@ app.post('/drivers/:driverId/car', async (req, res) => {
   }
 });
 
-// Get background check details for a specific driver
 app.get('/drivers/:driverId/background', async (req, res) => {
   const { driverId } = req.params;
   try {
@@ -144,7 +145,6 @@ app.get('/drivers/:driverId/background', async (req, res) => {
   }
 });
 
-// Update background check info
 app.post('/drivers/:driverId/background', async (req, res) => {
   const { driverId } = req.params;
   const { check_status, check_date, verified_by, notes } = req.body;
@@ -162,50 +162,70 @@ app.post('/drivers/:driverId/background', async (req, res) => {
   }
 });
 
-// GET latest insurance details
 app.get('/drivers/:driverId/insurance', async (req, res) => {
   const { driverId } = req.params;
-  const result = await pool.query(
-    'SELECT * FROM insurance_details WHERE driver_id = $1 ORDER BY start_date DESC LIMIT 1',
-    [driverId]
-  );
-  res.json(result.rows[0] || {});
+  try {
+    const result = await pool.query(
+      'SELECT * FROM insurance_details WHERE driver_id = $1 ORDER BY start_date DESC LIMIT 1',
+      [driverId]
+    );
+    res.json(result.rows[0] || {});
+  } catch (err) {
+    console.error('Error fetching insurance details:', err.message);
+    res.status(500).json({ error: 'Failed to fetch insurance details' });
+  }
 });
 
-// POST new insurance details
 app.post('/drivers/:driverId/insurance', async (req, res) => {
   const { provider, policy_number, start_date, end_date } = req.body;
-  await pool.query(
-    `INSERT INTO insurance_details(driver_id, provider, policy_number, start_date, end_date)
-     VALUES($1,$2,$3,$4,$5)`,
-    [req.params.driverId, provider, policy_number, start_date, end_date]
-  );
-  res.json({ success: true });
+  if (!policy_number) return res.status(400).json({ error: 'Missing policy_number' });
+  try {
+    await pool.query(
+      `INSERT INTO insurance_details(driver_id, provider, policy_number, start_date, end_date)
+       VALUES($1,$2,$3,$4,$5)`,
+      [req.params.driverId, provider, policy_number, start_date, end_date]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating insurance details:', err.message);
+    res.status(500).json({ error: 'Failed to update insurance details' });
+  }
 });
 
-// GET latest banking info
 app.get('/drivers/:driverId/banking', async (req, res) => {
   const { driverId } = req.params;
-  const result = await pool.query(
-    'SELECT * FROM driver_banking_info WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 1',
-    [driverId]
-  );
-  res.json(result.rows[0] || {});
+  try {
+    const result = await pool.query(
+      'SELECT * FROM driver_banking_info WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 1',
+      [driverId]
+    );
+    res.json(result.rows[0] || {});
+  } catch (err) {
+    console.error('Error fetching banking info:', err.message);
+    res.status(500).json({ error: 'Failed to fetch banking info' });
+  }
 });
 
-// POST new banking info
 app.post('/drivers/:driverId/banking', async (req, res) => {
   const { bank_name, account_number, routing_number } = req.body;
-  await pool.query(
-    `INSERT INTO driver_banking_info(driver_id, bank_name, account_number, routing_number, created_at)
-     VALUES($1,$2,$3,$4,NOW())`,
-    [req.params.driverId, bank_name, account_number, routing_number]
-  );
-  res.json({ success: true });
+  try {
+    await pool.query(
+      `INSERT INTO driver_banking_info(driver_id, bank_name, account_number, routing_number, created_at)
+       VALUES($1,$2,$3,$4,NOW())
+       ON CONFLICT (driver_id) DO UPDATE SET
+         bank_name = EXCLUDED.bank_name,
+         account_number = EXCLUDED.account_number,
+         routing_number = EXCLUDED.routing_number,
+         created_at = NOW()`,
+      [req.params.driverId, bank_name, account_number, routing_number]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Error updating banking info:', err.message);
+    res.status(500).json({ error: 'Failed to update banking info' });
+  }
 });
 
-
-// Update driver status
 app.post('/drivers/update-status', async (req, res) => {
   const { driver_id, new_status } = req.body;
   if (!driver_id || !new_status) {
