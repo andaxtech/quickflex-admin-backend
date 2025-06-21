@@ -1,9 +1,9 @@
-// Test root route
+// Deployment debug - trying root route
+
 app.get('/', (req, res) => {
   res.send('QuickFlex Admin Backend is running.');
 });
 
-// Get pending drivers
 app.get('/drivers/pending', async (req, res) => {
   try {
     const result = await pool.query(
