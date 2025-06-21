@@ -1,19 +1,9 @@
-const express = require('express');
-const cors = require('cors');
-const { Pool } = require('pg');
-require('dotenv').config();
-
-const app = express();
-const port = process.env.PORT || 3000;
-
-app.use(cors());
-app.use(express.json());
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+// Test root route
+app.get('/', (req, res) => {
+  res.send('QuickFlex Admin Backend is running.');
 });
 
+// Get pending drivers
 app.get('/drivers/pending', async (req, res) => {
   try {
     const result = await pool.query(
@@ -27,8 +17,4 @@ app.get('/drivers/pending', async (req, res) => {
     console.error('Error fetching drivers:', err.message);
     res.status(500).json({ error: 'Failed to fetch drivers' });
   }
-});
-
-app.listen(port, () => {
-  console.log(`Admin backend running on port ${port}`);
 });
